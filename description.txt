@@ -1,0 +1,473 @@
+Socio-Econ Sim
+
+
+THE MODEL
+State - Global Directed Graph
+- 2 node types: Agents and Institutions
+- Edges define their relationship
+
+Environment - Global Rules/Constants
+
+Dynamics - (state, environment) -> next state
+- Two LLM pipeline
+    - Writer - imagines a scene between two nodes
+    - Compiler - turns writer output into a pat
+- Events:
+    - Production events
+    - Stochastic events
+    - Node - Node
+        - Existing connections
+        - New connections
+    - Single Node
+
+
+Node Schema
+
+AGENT ATTRIBUTES:
+
+Traits (stable)
+- ID + Name
+- Created_at
+- Birth Family
+- Risk Tolerance (0 - 1)
+- Time Horizon/Patience (0 - 1)
+- Norm Sensitivity (0 - 1)
+- Trust Disposition (0 - 1)
+- Reputation Sensitivity (0 - 1)
+- Enforcement Aversion (0 - 1)
+- Adaptability/Learning Rate (0 - 1)
+- Memory Capacity
+- Network Bandwidth
+- Exploration rate
+- Reproduction Rate
+- Shock exposure
+- Lifespan
+- Personality (language)
+    - Just collapses all traits
+
+State (dynamic)
+- Age
+- Last_updated
+- Job (language)
+- Memories. For each memory
+    - ID
+    - created_at
+    - Node implicated (list of node IDs)
+    - Description (language)
+- Assets. For each asset:
+    - ID
+    - Created_at
+    - Last_updated
+    - Value
+    - Status
+        - Active | sold | destroyed | transferred
+    - Description (language)
+        - What the asset is, is it liquid, etc.
+- Debts. For each debt:
+    - ID
+    - Created_at
+    - Last_updated
+    - Due_at (nullable)
+    - Value
+    - Status
+        - Active | repaid | defaulted | forgiven | disputed
+    - Creditor ID
+    - Interest_rate (nullable)
+    - Description (language)
+        - Why it came about, etc.
+- Claims. For each claim:
+    - ID
+    - Created_at
+    - Last_updated
+    - Due_at (nullable)
+    - Value
+    - Status
+        - Active | repaid | defaulted | forgiven | disputed
+    - Debtor ID
+    - Interest_rate (nullable)
+    - Description (language)
+        - Why it came about, etc.
+- Reputation
+- Succession Intent (language)
+
+
+
+INSTITUTION ATTRIBUTES
+
+Traits (static)
+- ID + Name
+- Created_at
+- Memory Capacity
+- Rigidity (0 - 1)
+- Institution Type (language)
+- Institution Description (language)
+
+State (dynamic)
+- Last_updated
+- Reputation (0 - 1)
+- Capabilities (language)
+- Policies (language)
+- Governance (language)
+- Memories. For each memory
+    - ID
+    - created_at
+    - Node implicated (list of Node IDs)
+    - Description (language)
+- Succession Rules (language)
+- Assets. For each asset:
+    - ID
+    - Created_at
+    - Last_updated
+    - Value
+    - Status
+        - Active | sold | destroyed | transferred
+    - Description (language)
+        - What the asset is, is it liquid, etc.
+- Debts. For each debt:
+    - ID
+    - Created_at
+    - Last_updated
+    - Due_at (nullable)
+    - Value
+    - Status
+        - Active | repaid | defaulted | forgiven | disputed
+    - Creditor ID
+    - Interest_rate (nullable)
+    - Description (language)
+        - Why it came about, etc.
+- Claims. For each claim:
+    - ID
+    - Created_at
+    - Last_updated
+    - Due_at (nullable)
+    - Value
+    - Status
+        - Active | repaid | defaulted | forgiven | disputed
+    - Debtor ID
+    - Interest_rate (nullable)
+    - Description (language)
+        - Why it came about, etc.
+
+
+
+Edge Schema
+
+Metadata
+- ID
+- Source id
+- Target id
+- Created_at
+- Last_updated
+
+Characteristics
+- Strength 
+    - Salience of tie (0 - 1)
+- Consent
+    - Whether or not target opted in (bool)
+- Visibility
+    - How observable this tie is to others (0 - 1)
+- Activation rate
+    - Probability the tie is used (0 - 1)
+- Enforceability
+    - How strongly violations can be punished (0 - 1)
+
+Lifecycle
+- Strength Decay Rate (nullable)
+- Edge Expiration date (nullable)
+
+Open-ended Specifics
+- Relationship Description (language)
+- Expectations (language)
+- Stipulations (language)
+- Rights and Powers (language)
+- History (language)
+
+
+ENVIRONMENT
+- Interaction Opportunity Rate (per node) - How often new nodes interact
+- Information Fidelity - How accurately actions/outcomes are visible
+- Transaction Friction - Cost of exchange
+- Shocks
+    - Shock frequency
+    - Shock distribution (sign and magnitude)
+    - Shock story (language)
+- Inflow Rule - injects assets into the system without agents being involved
+    - inflow_amount
+    - inflow_targets
+    - inflow_frequency
+    - inflow_story (language)
+- Seeding (we will only start with agents with families)
+    - Population size
+    - Family size distribution
+    - Num families (derived)
+
+Dynamics
+
+Below is a full Dynamics Pipeline Schema that matches your model exactly: global directed graph state, environment globals, pair interactions + solo production, two-LLM pipeline (Writer → Compiler), minimal patch ops, and token-saving measures built in.
+
+⸻
+
+Dynamics Pipeline Schema
+
+Inputs
+	•	State S_t: Global directed graph
+	•	Nodes: Agents + Institutions (both treated as “nodes” in dynamics)
+	•	Edges: Directed relationships (your edge schema)
+	•	Environment E:
+	•	Interaction Opportunity Rate (per node)
+	•	Information Fidelity
+	•	Transaction Friction
+	•	Shocks (freq + distribution + story)
+	•	Inflow rule
+	•	Seeding (only at t=0)
+	•	Global budgets / caps (engine-level, not schema):
+	•	max_pair_opps_per_step
+	•	max_prod_ops_per_step
+	•	max_tokens_per_step (soft)
+	•	max_prod_value_per_node (production clamp)
+
+Outputs
+	•	Next State S_{t+1} (graph with updated nodes/edges/ledgers/memories)
+
+⸻
+
+Patch Model (minimal)
+
+LLMs never mutate state directly; they output patches.
+
+Patch Ops
+	•	create_node
+	•	update_node
+	•	create_edge
+	•	update_edge
+	•	(delete_edge optional)
+
+update_node edit primitives (tiny)
+	•	set(path, value)
+	•	append(path, item)
+	•	update_item(path, id, fields)
+	•	(remove_item(path, id) optional)
+
+⸻
+
+Timestep: S_t, E \rightarrow S_{t+1}
+
+Phase 0 — Observation build (engine)
+
+For every node n, build an ObservationPacket with bounded context.
+
+ObservationPacket (thin)
+	•	t
+	•	self_summary (scalars + short language)
+	•	top_edges (top-K incident edges by strength×activation)
+	•	neighbor_summaries (IDs + a few scalars only)
+	•	selected_memories (top-M by recency/salience)
+	•	recent_visible_events (summaries, if you log events)
+	•	env_snippet (only what matters: friction, info fidelity)
+
+Filters
+	•	Apply Information Fidelity:
+	•	drop some facts/events or add noise
+	•	Apply per-node clamps:
+	•	Network Bandwidth → max edges/neighbors included
+	•	Memory Capacity → max memories provided
+
+Token saver: never include full ledgers; include counts + top few items only.
+
+⸻
+
+Phase 1 — Sample pair interaction opportunities (engine)
+
+Treat all nodes uniformly.
+
+1.1 Interaction budget per node
+
+For each node u:
+	•	m_u ~ Poisson(InteractionOpportunityRate), then m_u = min(m_u, m_max)
+
+1.2 For each attempt, choose mode
+
+With probability 1-\rho: existing-tie activation
+With probability \rho: novel encounter
+	•	Existing-tie candidate set: incident neighbors from edges
+	•	weight: w(u,v) = ε + strength * activation_rate (using max/sum across directions)
+	•	Novel candidate set: random node (optionally 2-hop biased)
+
+1.3 Create opportunities
+
+Each selection yields an unordered pair {u,v} plus metadata initiator=u.
+
+1.4 Deduplicate + cap
+	•	Deduplicate unordered pairs
+	•	Enforce global cap max_pair_opps_per_step
+
+Output: pair_opps = [{u,v, initiators…}, …]
+
+Token saver: prefer sampling from cached top-K neighbors.
+
+⸻
+
+Phase 2 — Sample solo production opportunities (engine)
+
+Alongside pair opportunities, sample single nodes to “produce.”
+	•	Choose nodes:
+	•	either produce? ~ Bernoulli(prod_rate) per node
+	•	or fixed budget B_prod sampled uniformly
+	•	Cap by max_prod_ops_per_step
+
+Output: prod_opps = [u1, u2, …]
+
+⸻
+
+Phase 3 — Writer LLM (freeform)
+
+Writer generates narrative outcomes.
+
+3A) Writer for pair interactions
+
+For each opportunity (u,v):
+
+Writer input
+	•	ObservationPacket(u) (thin)
+	•	ObservationPacket(v) (thin)
+	•	existing edges between u and v (if any; include only core scalars + open-ended fields)
+	•	a short instruction: “decide what happens between u and v”
+
+Writer output
+	•	scene (language; capped)
+	•	outcome_summary (required; 1–3 sentences, concrete)
+	•	must mention any: transfers, new obligations, edge changes, reputation impacts, institution formation, etc.
+
+3B) Writer for solo production
+
+For each node u:
+
+Writer input
+	•	ObservationPacket(u) (thin)
+	•	optional env snippet (friction irrelevant; shocks optional)
+
+Writer output
+	•	scene (language; capped)
+	•	outcome_summary (required; concrete production result)
+
+Token savers
+	•	Hard cap Writer output length
+	•	Require outcome summary (so compiler doesn’t need full scene)
+
+⸻
+
+Phase 4 — Compiler LLM (strict accountant)
+
+Compiler converts Writer outcome summaries into patches.
+
+4A) Compiler inputs are skinny
+
+Compiler sees:
+	•	outcome_summary (not full scene unless needed)
+	•	minimal “ledger facts” for involved nodes:
+	•	e.g., cash_est, asset_count, debt_count, claim_count
+	•	existing edge scalars if updating/creating edge
+	•	patch spec reminder (short)
+
+4B) Compiler output
+
+A Patch containing ops only from the minimal set:
+	•	create/update nodes/edges (and optional delete_edge)
+	•	update_node edits must use only: set, append, update_item
+
+Important rule: compiler must not rewrite entire arrays (assets/debts/claims/memories); only targeted edits.
+
+Token savers
+	•	Compiler receives outcome summary, not narrative
+	•	Compiler never receives full node trait blocks
+	•	Patch JSON is compact
+
+⸻
+
+Phase 5 — Engine validation + commit (engine)
+
+Engine applies patches and enforces invariants.
+
+5.1 Validate
+	•	IDs exist / unique
+	•	numeric ranges for 0–1 fields
+	•	valid status enums
+	•	timestamps monotone
+	•	due_at nullable parseable
+	•	edge fields match schema
+
+5.2 Apply economic mechanics
+	•	Transaction friction: apply cost to any value transfer implied by patch edits
+	•	Production clamp: if patch came from production phase and increases total wealth:
+	•	clamp value increase per node per step (max_prod_value_per_node)
+	•	optional global clamp per step
+
+5.3 Conflict resolution
+
+If multiple patches touch same resource:
+	•	deterministic ordering (e.g., by time submitted / node ID)
+	•	partial fills or failures (engine choice)
+	•	record outcomes in edge/node history fields if desired
+
+5.4 Commit
+
+Apply all ops to produce intermediate state S'.
+
+⸻
+
+Phase 6 — Environment processes (engine)
+
+Apply exogenous updates after commits (or before—choose and keep consistent).
+
+6.1 Shocks
+	•	Sample affected nodes via shock frequency
+	•	Apply shock deltas from distribution (sign + magnitude)
+	•	Append a memory entry (language) using shock story
+
+6.2 Inflow
+	•	Apply inflow_frequency; inject assets into targets
+	•	Append memory entries with inflow_story (optional)
+
+6.3 Aging / death / birth
+	•	Age agents
+	•	If death: trigger succession
+
+6.4 Succession handling (two-LLM micro-pipeline, only when needed)
+	•	Writer: propose distribution consistent with Succession Intent + institution Succession Rules
+	•	Compiler: patch
+	•	Engine validates/commits
+
+Result: S_{t+1}
+
+⸻
+
+Phase 7 — Memory maintenance (engine)
+
+For each node:
+	•	append 0–N memories summarizing:
+	•	events involving the node
+	•	visible events (filtered by edge visibility × info fidelity)
+	•	enforce Memory Capacity:
+	•	drop oldest or lowest-priority
+
+Token saver: memory writing can be engine-templated; no LLM required.
+
+⸻
+
+Token Expenditure Controls (built-in)
+	•	Thin observation packets (top-K edges, top-M memories)
+	•	Outcome summaries required (compiler doesn’t need full narrative)
+	•	Compiler gets minimal ledger facts only
+	•	Global caps: max pair opps + max prod opps per step
+	•	Skip low-signal interactions: ignore edges with strength×activation below threshold
+	•	Batching option (optional):
+	•	one Writer call per node handling multiple meetings, then compile to multiple patches
+
+⸻
+
+This pipeline gives you:
+	•	open-ended emergent behavior (Writer)
+	•	consistent state mutation (Compiler + engine)
+	•	minimal patch language (4 ops)
+	•	realistic economic “nonzero-sum” via production + inflow, bounded by clamps
+	•	controllable token burn via caps and thin context

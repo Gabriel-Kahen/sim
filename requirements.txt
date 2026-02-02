@@ -1,0 +1,4 @@
+pyyaml
+google-generativeai
+python-dotenv
+numpy
