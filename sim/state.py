@@ -54,13 +54,17 @@ def _set_path(data: Dict[str, Any], path: str, value: Any) -> None:
     if container is None or key is None:
         return
     if isinstance(container, list):
-        raise ValueError(f"set path cannot land in list: {path}")
+        # Ignore invalid set into list
+        return
     container[key] = value
 
 
 def _append_path(data: Dict[str, Any], path: str, item: Any) -> None:
     container, key = _resolve_container(data, path)
     if container is None or key is None:
+        return
+    if isinstance(container, list):
+        # Path resolution landed in a list; skip to avoid type errors.
         return
     if key not in container or not isinstance(container[key], list):
         container[key] = []
@@ -85,6 +89,8 @@ def _remove_item(data: Dict[str, Any], path: str, item_id: str) -> None:
     if container is None or key is None:
         return
     if key not in container or not isinstance(container[key], list):
+        return
+    if item_id is None:
         return
     container[key] = [obj for obj in container[key] if not (isinstance(obj, dict) and obj.get("id") == item_id)]
 
@@ -237,7 +243,10 @@ class SimulationState:
                     continue
                 _update_item(node.__dict__, path, item_id, change.get("fields", {}))
             elif ctype == "remove_item":
-                _remove_item(node.__dict__, change["path"], change["id"])
+                item_id = change.get("id")
+                if item_id is None:
+                    continue
+                _remove_item(node.__dict__, path, item_id)
             elif ctype == "increment":
                 # Increment a numeric field; ignore if non-numeric.
                 container, key = _resolve_container(node.__dict__, path)

@@ -16,10 +16,12 @@ Python CLI implementing the described socio-economic simulation with a Gemini Wr
 - `python3 -m sim.cli list` — list saved states.
 - `python3 -m sim.cli show [--id <state_id>]` — show summary of current or specified state.
 - `python3 -m sim.cli rewind --to <state_id>` — point "current" to an existing snapshot (history is preserved).
-- `python3 -m sim.cli graph [--id <state_id>] --out out.dot` — emit GraphViz DOT for the current (or specified) state; print to stdout if `--out` is omitted.
+- `python3 -m sim.cli graph [--id <state_id>] [--out out.dot]` — emit GraphViz DOT for the current (or specified) state; defaults to current state and writes `out.dot`.
 - After each `step`, a tick event log is written to `data/tick_events/t<t>.json` with the raw event list and an LLM-generated summary for that tick.
 
 ## Notes
-- LLM pipeline: thin observation packets → Gemini Writer (narrative) → Gemini Compiler (or deterministic heuristic) emitting minimal patch ops → engine validation/apply → environment processes (shocks, inflow, friction/clamps) → memory maintenance.
+- LLM pipeline: thin observation packets → Gemini Writer (narrative) → Gemini Compiler (JSON patches; falls back to deterministic memory appends if unusable) → engine validation/apply → environment processes (shocks, inflow, friction/clamps) → memory maintenance.
 - Persistence: each tick saved as `data/t{t}-<uuid>.json` with `data/index.json` tracking history and current pointer.
-- Seeding: agents created in family clusters with initial assets and family edges; a starter institution is added.
+- Seeding: agents created in family clusters with initial assets and family edges; one institution per family is added.
+- Edges: enforced single, undirected edge per unordered pair (`edge-<src>-<tgt>`). LLM edge updates merge into the existing edge; bad endpoints are skipped.
+- State drift: jobs and succession intent change via LLM patches and light engine drift (random job/intention updates). Births and deaths are simulated: agents can have children (inherit family/institution links) and die (assets shift to family institution). Defection: agents can rarely leave their family and form a new family/institution. Memories accrue from interactions, shocks, inflows, and fallback summaries, capped by memory_capacity.

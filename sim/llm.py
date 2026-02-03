@@ -47,7 +47,7 @@ class LLMClient:
         prompt = (
             "You are a creative socio-economic simulator. Given two nodes, write a concise outcome.\n"
             f"Node A: {obs_u}\nNode B: {obs_v}\n"
-            "Return 2-3 sentences describing what happens, including any transfers, obligations, edge changes, or reputational impacts."
+            "Return 2-3 sentences describing what happens, including any transfers, obligations, edge changes, reputational impacts. You may also change jobs or succession intents if warranted."
         )
         text = self._generate(prompt)
         return {"scene": text, "outcome_summary": text.split("\n")[0][:400]}
@@ -94,6 +94,34 @@ class LLMClient:
         )
         text = self._generate(prompt)
         return text or f"Tick {t}: " + " | ".join(events)
+
+    def propose_institution(self, participants: list[dict], outcome_summary: str) -> Dict[str, str]:
+        """
+        Ask the LLM for an open-ended institution spec (type/name/description).
+        """
+        prompt = (
+            "Two or more agents want to form a new institution that is NOT a family/kin/support network. "
+            "Base it on their jobs/networks/interests (e.g., finance, trade, guild, research, security, education, healthcare, logistics, culture). "
+            "Propose a JSON object with keys: \"name\",\"institution_type\",\"description\",\"policies\",\"governance\". "
+            "Keep it short and grounded in the outcome. Avoid words: family, kin, mutual aid, support network.\n"
+            f"Participants: {participants}\nOutcome: {outcome_summary}\n"
+            "Respond with JSON only."
+        )
+        try:
+            raw = self._generate_json(prompt)
+            data = self._coerce_json(raw)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+        # Fallback
+        return {
+            "name": "Cooperative",
+            "institution_type": "Cooperative",
+            "description": "A small cooperative formed to coordinate resources.",
+            "policies": "Mutual support and fair exchange",
+            "governance": "Consensus among members",
+        }
 
     @staticmethod
     def _coerce_json(raw: str) -> Dict[str, Any]:

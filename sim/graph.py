@@ -10,9 +10,18 @@ def _safe(s: str) -> str:
 
 def _node_label(node: Node) -> str:
     rep = node.state.get("reputation", 0.5)
-    assets = len(node.state.get("assets", []))
-    debts = len(node.state.get("debts", []))
-    claims = len(node.state.get("claims", []))
+    assets_list = node.state.get("assets", [])
+    if not isinstance(assets_list, list):
+        assets_list = []
+    debts_list = node.state.get("debts", [])
+    if not isinstance(debts_list, list):
+        debts_list = []
+    claims_list = node.state.get("claims", [])
+    if not isinstance(claims_list, list):
+        claims_list = []
+    assets = len(assets_list)
+    debts = len(debts_list)
+    claims = len(claims_list)
     return f"{node.name}\\n{node.kind}\\nrep={rep:.2f}, A={assets}, D={debts}, C={claims}"
 
 

@@ -41,3 +41,17 @@ engine:
   top_k_edges: 3
   top_m_memories: 3
   strength_activation_threshold: 0.05
+  job_change_rate: 0.1
+  job_options: ["Informal", "Skilled trade", "Merchant", "Farmer", "Clerk", "Laborer"]
+  succession_update_rate: 0.05
+  succession_templates:
+    - "Leave assets to eldest kin."
+    - "Distribute equally among siblings."
+    - "Donate excess to family institution."
+  birth_rate: 0.07
+  birth_trait_noise: 0.1
+  initial_child_reputation_range: [0.4, 0.7]
+  max_children_per_parent: 4
+  death_jitter: 15
+  defection_rate: 0.01
+  institution_formation_rate: 0.1

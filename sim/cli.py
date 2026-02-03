@@ -62,11 +62,9 @@ def cmd_rewind(args: argparse.Namespace) -> None:
 def cmd_graph(args: argparse.Namespace) -> None:
     state = get_state(args.id)
     dot = state_to_dot(state)
-    if args.out:
-        Path(args.out).write_text(dot, encoding="utf-8")
-        print(f"Wrote graph DOT to {args.out}")
-    else:
-        print(dot)
+    out_path = args.out or Path("out.dot")
+    Path(out_path).write_text(dot, encoding="utf-8")
+    print(f"Wrote graph DOT to {out_path}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -97,7 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_graph = sub.add_parser("graph", help="Output GraphViz DOT for current/specific state")
     p_graph.add_argument("--id", help="State id (defaults to current)")
-    p_graph.add_argument("--out", type=Path, help="Path to write DOT (stdout if omitted)")
+    p_graph.add_argument("--out", type=Path, help="Path to write DOT (defaults to out.dot)")
     p_graph.set_defaults(func=cmd_graph)
 
     return parser
