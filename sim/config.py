@@ -14,8 +14,8 @@ TICK_EVENTS_DIR = DATA_DIR / "tick_events"
 
 def load_env_key() -> str | None:
     """
-    Load Gemini API key from environment or .env file.
-    Supports both Gemini_Key and GEMINI_KEY for flexibility.
+    Legacy helper to load a Gemini API key from environment or .env file.
+    Vertex AI is now used by default; this is kept for backward compatibility.
     """
     load_dotenv()
     key = os.getenv("Gemini_Key") or os.getenv("GEMINI_KEY")

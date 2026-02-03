@@ -187,6 +187,17 @@ class Simulator:
 
         nodes_list = list(state.nodes.values())
 
+        # Normalize container types up front to avoid str/list mismatches.
+        for node in nodes_list:
+            if not isinstance(node.state, dict):
+                node.state = {}
+            for key in ("assets", "debts", "claims", "memories", "children"):
+                val = node.state.get(key)
+                if not isinstance(val, list):
+                    node.state[key] = [] if key != "children" else []
+            if not isinstance(node.traits, dict):
+                node.traits = {}
+
         # Apply transaction friction to newly added assets in this tick (approx: reduce last asset entries)
         for node in nodes_list:
             assets = node.state.get("assets", [])
@@ -204,15 +215,25 @@ class Simulator:
         # Shocks
         shocks = env.get("shocks", {})
         shock_freq = shocks.get("frequency", 0)
-        for node in nodes_list:
-            if random.random() < shock_freq:
-                magnitude = random.gauss(shocks.get("magnitude_mean", 0), shocks.get("magnitude_std", 1))
-                shock_story = shocks.get("story")
-                if isinstance(shock_story, list):
-                    shock_story = None
-                if not isinstance(shock_story, str) or not shock_story:
-                    shock_story = self.llm.propose_shock_story(node.to_dict(), env)
-                assets_list = node.state.get("assets")
+        if shock_freq > 0 and random.random() < shock_freq and nodes_list:
+            magnitude = random.gauss(shocks.get("magnitude_mean", 0), shocks.get("magnitude_std", 1))
+            base_story = shocks.get("story")
+            if isinstance(base_story, list):
+                base_story = None
+            context = {
+                "t": state.t,
+                "env": env,
+                "sample_jobs": [n.state.get("job") for n in nodes_list if isinstance(n.state.get("job"), str)],
+                "recent_institutions": [
+                    n.traits.get("institution_type") for n in nodes_list if n.kind == "institution" and isinstance(n.traits, dict)
+                ],
+            }
+            shock_spec = self.llm.propose_shock_event(context)
+            shock_story = shock_spec.get("story") or base_story or "A sudden economic disruption"
+            keywords = [k.lower() for k in shock_spec.get("keywords", []) if isinstance(k, str) and k.strip()]
+            targets = self._select_shock_targets(nodes_list, keywords)
+            for node in targets:
+                assets_list = node.state.get("assets", [])
                 if not isinstance(assets_list, list):
                     assets_list = []
                     node.state["assets"] = assets_list
@@ -223,17 +244,17 @@ class Simulator:
                         "last_updated": now_ts(),
                         "value": magnitude,
                         "status": "active",
-                        "description": shock_story or "Shock event",
+                        "description": shock_story,
                     }
                 )
-                mems_list = node.state.get("memories")
+                mems_list = node.state.get("memories", [])
                 if not isinstance(mems_list, list):
                     mems_list = []
                     node.state["memories"] = mems_list
-                mems_list.append(
-                    {"id": new_id("mem"), "created_at": now_ts(), "description": shock_story or "Shock event"}
-                )
-                event_log.append(f"Shock to {node.id}: {shock_story or ''} (delta {round(magnitude,2)})")
+                mems_list.append({"id": new_id("mem"), "created_at": now_ts(), "description": shock_story})
+            event_log.append(
+                f"Shock: {shock_story} -> targets {[n.id for n in targets]} (delta {round(magnitude,2)}, keywords={keywords})"
+            )
 
         # Inflow
         inflow = env.get("inflow", {})
@@ -672,6 +693,36 @@ class Simulator:
                 removed = state.edges.pop(weakest_id, None)
                 if removed:
                     event_log.append(f"Pruned edge {weakest_id} between {removed.source}-{removed.target}")
+
+    def _select_shock_targets(self, nodes: List[Node], keywords: List[str]) -> List[Node]:
+        if not nodes:
+            return []
+        clean_kw = [k.lower() for k in keywords if isinstance(k, str) and k.strip()]
+        if not clean_kw:
+            pool = nodes.copy()
+            random.shuffle(pool)
+            return pool[: max(1, len(pool) // 4 or 1)]
+
+        scored: List[Tuple[float, Node]] = []
+        for n in nodes:
+            job_txt = str(n.state.get("job", "")).lower() if isinstance(n.state.get("job"), str) else ""
+            inst_txt = ""
+            if isinstance(n.traits, dict):
+                inst_txt = str(n.traits.get("institution_type", "")).lower()
+            text_blobs = [job_txt, inst_txt, n.name.lower()]
+            score = 0
+            for kw in clean_kw:
+                if any(kw in blob for blob in text_blobs if blob):
+                    score += 1.0
+            if score > 0:
+                scored.append((score, n))
+        if not scored:
+            pool = nodes.copy()
+            random.shuffle(pool)
+            return pool[: max(1, len(pool) // 4 or 1)]
+        scored.sort(key=lambda x: x[0], reverse=True)
+        top_k = max(1, min(len(scored), max(2, len(nodes) // 3)))
+        return [n for _, n in scored[:top_k]]
 
     def _write_tick_event(self, state: SimulationState, event_log: List[str]) -> None:
         summary = self.llm.summarize_tick(event_log, state.t)

@@ -190,7 +190,7 @@ ENVIRONMENT
 - Shocks
     - Shock frequency
     - Shock distribution (sign and magnitude)
-    - Shock story (language)
+    - Shock story (language; LLM-generated and storied, targets selected via keywords)
 - Inflow Rule - injects assets into the system without agents being involved
     - inflow_amount
     - inflow_targets

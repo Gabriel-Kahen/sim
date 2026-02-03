@@ -1,4 +1,4 @@
 pyyaml
-google-generativeai
+google-cloud-aiplatform>=1.70.0
 python-dotenv
 numpy

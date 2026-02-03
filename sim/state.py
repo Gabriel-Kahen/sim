@@ -227,8 +227,14 @@ class SimulationState:
         self.events.append({"t": self.t, "notes": patch.notes})
 
     def _apply_node_changes(self, node: Node, changes: List[UpdateChange]) -> None:
+        if not isinstance(changes, list):
+            return
         for change in changes:
-            ctype = change["type"]
+            if not isinstance(change, dict):
+                continue
+            ctype = change.get("type")
+            if not ctype:
+                continue
             path = change.get("path")
             if not path:
                 continue

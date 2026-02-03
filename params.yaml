@@ -18,28 +18,27 @@ seeding:
   reputation_sensitivity_range: [0.2, 0.8]
   lifespan_range: [60, 90]
 environment:
-  interaction_opportunity_rate: 1.1
-  novel_pair_chance: 0.25
+  interaction_opportunity_rate: 1.5
+  novel_pair_chance: 0.15
   information_fidelity: 0.8
   transaction_friction: 0.05
   production_rate: 0.6
   shocks:
-    frequency: 0.1
+    frequency: 0.2
     magnitude_mean: 8
     magnitude_std: 4
-    story: "A macro shock ripples through the economy."
   inflow:
     amount: 6
     frequency: 0.25
     targets: "random_agents"
     story: "A universal stipend is distributed."
 engine:
-  max_pair_opps_per_step: 10
-  max_prod_ops_per_step: 6
+  max_pair_opps_per_step: 15
+  max_prod_ops_per_step: 10
   max_tokens_per_step: 2048
   max_prod_value_per_node: 50
-  top_k_edges: 3
-  top_m_memories: 3
+  top_k_edges: 5
+  top_m_memories: 5
   strength_activation_threshold: 0.05
   job_change_rate: 0.1
   succession_update_rate: 0.05
@@ -47,12 +46,12 @@ engine:
     - "Leave assets to eldest kin."
     - "Distribute equally among siblings."
     - "Donate excess to family institution."
-  birth_rate: 0.05
+  birth_rate: 0.06
   birth_trait_noise: 0.1
   initial_child_reputation_range: [0.4, 0.7]
   max_children_per_parent: 4
   death_jitter: 15
   defection_rate: 0.01
-  institution_formation_rate: 0.1
+  institution_formation_rate: 0.2
   max_edges_agent: 10
-  max_edges_institution: 20
+  max_edges_institution: 30

@@ -5,7 +5,8 @@ Python CLI implementing the described socio-economic simulation with a Gemini Wr
 ## Setup
 - Python 3.10+ recommended.
  - Install deps: `pip install -r requirements.txt`
- - Put your Gemini API key in `.env` as `GEMINI_KEY`. Optionally set `GEMINI_MODEL` (default `gemini-1.0-pro`). LLM failures will raise; no mock fallback.
+ - Auth for Vertex AI (application-default credentials), e.g. `gcloud auth application-default login` and ensure the right project is selected.
+ - Set `.env` with `VERTEX_PROJECT=<your_project>`, optional `VERTEX_LOCATION` (default `us-central1`), and `VERTEX_MODEL` (default `gemini-2.5-flash-lite`). LLM failures will raise; no mock fallback.
 
 ## Config
 - `params.yaml` holds seeding, environment, and engine defaults. Edit and rerun steps to apply.
@@ -23,5 +24,6 @@ Python CLI implementing the described socio-economic simulation with a Gemini Wr
 - LLM pipeline: thin observation packets → Gemini Writer (narrative) → Gemini Compiler (JSON patches; falls back to deterministic memory appends if unusable) → engine validation/apply → environment processes (shocks, inflow, friction/clamps) → memory maintenance.
 - Persistence: each tick saved as `data/t{t}-<uuid>.json` with `data/index.json` tracking history and current pointer.
 - Seeding: agents created in family clusters with initial assets and family edges; one institution per family is added.
-- Edges: enforced single, undirected edge per unordered pair (`edge-<src>-<tgt>`). LLM edge updates merge into the existing edge; bad endpoints are skipped.
+- Shocks/inflows: environment may trigger LLM-generated, storied shocks (with keyword-based targeting) or inflows; effects are added as assets and memories per affected node.
+- Edges: enforced single, undirected edge per unordered pair (`edge-<src>-<tgt>`); weakest edges are pruned beyond per-type caps. LLM edge updates merge into the existing edge; bad endpoints are skipped.
 - State drift: jobs and succession intent change via LLM patches and light engine drift (random job/intention updates; jobs are LLM-proposed when no preset options). Births and deaths are simulated: agents can have children (inherit family/institution links) and die (assets shift to family institution). Defection: agents can rarely leave their family and form a new family/institution. Memories accrue from interactions, shocks, inflows, and fallback summaries, capped by memory_capacity.

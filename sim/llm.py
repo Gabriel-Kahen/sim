@@ -1,38 +1,49 @@
 import ast
 import json
 import os
+import random
 from typing import Any, Dict, Optional
+import warnings
 
 from .models import Patch, new_id
 
 
 class LLMClient:
     """
-    Gemini-backed Writer/Compiler. Raises if the LLM is unavailable or responses are invalid.
+    Vertex AI-backed Writer/Compiler. Raises if the LLM is unavailable or responses are invalid.
     """
 
-    def __init__(self, api_key: Optional[str]):
-        if not api_key:
-            raise ValueError("Gemini API key is required")
-        self.model_name = os.getenv("GEMINI_MODEL", "gemini-1.0-pro")
+    def __init__(self, api_key: Optional[str] = None):
+        # api_key is ignored; kept for backward compatibility.
+        self.model_name = os.getenv("VERTEX_MODEL") or os.getenv("GEMINI_MODEL") or "gemini-2.5-flash-lite"
+        project = os.getenv("VERTEX_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
+        location = os.getenv("VERTEX_LOCATION", "us-central1")
+        if not project:
+            raise ValueError("Vertex project is required; set VERTEX_PROJECT or GOOGLE_CLOUD_PROJECT")
         try:
-            import google.generativeai as genai
+            warnings.filterwarnings(
+                "ignore",
+                category=UserWarning,
+                module="vertexai.generative_models._generative_models",
+            )
+            import vertexai
+            from vertexai.preview.generative_models import GenerativeModel
 
-            genai.configure(api_key=api_key)
-            self._model = genai.GenerativeModel(self.model_name)
+            vertexai.init(project=project, location=location)
+            self._model = GenerativeModel(self.model_name)
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize Gemini model {self.model_name}: {e}") from e
+            raise RuntimeError(f"Failed to initialize Vertex model {self.model_name}: {e}") from e
 
     def _generate(self, prompt: str) -> str:
         try:
             resp = self._model.generate_content(prompt)
             return resp.text or ""
         except Exception as e:
-            raise RuntimeError(f"Gemini generation failed: {e}") from e
+            raise RuntimeError(f"LLM generation failed: {e}") from e
 
     def _generate_json(self, prompt: str) -> str:
         """
-        Ask Gemini to return JSON only.
+        Ask the LLM to return JSON only.
         """
         try:
             resp = self._model.generate_content(
@@ -41,7 +52,7 @@ class LLMClient:
             )
             return resp.text or ""
         except Exception as e:
-            raise RuntimeError(f"Gemini JSON generation failed: {e}") from e
+            raise RuntimeError(f"LLM JSON generation failed: {e}") from e
 
     def writer_pair(self, obs_u: Dict[str, Any], obs_v: Dict[str, Any]) -> Dict[str, str]:
         prompt = (
@@ -201,6 +212,29 @@ class LLMClient:
         except Exception:
             pass
         return "A grant program releases funds."
+
+    def propose_shock_event(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Ask the LLM for a concrete shock event: story + who is most affected.
+        Expect JSON: {"story": "...", "keywords": ["farmer","mine",...]}
+        """
+        prompt = (
+            "Propose a brief shock story grounded in a concrete event (e.g., gold mine discovery, forest fire, new invention, drought). Be creative with what the shock is."
+            "Also propose keywords for who is most affected (jobs/institutions). "
+            "Respond with JSON only: {\"story\": \"...\", \"keywords\": [\"keyword1\",\"keyword2\", ...]}.\n"
+            f"Context: {context}\n"
+            "Avoid generic phrasing."
+        )
+        try:
+            raw = self._generate_json(prompt)
+            data = self._coerce_json(raw)
+            if isinstance(data, dict) and "story" in data:
+                if "keywords" not in data or not isinstance(data.get("keywords"), list):
+                    data["keywords"] = []
+                return data
+        except Exception:
+            pass
+        return {"story": "A sudden market crash hits trading routes.", "keywords": ["merchant", "trade", "market"]}
 
     def propose_edge_description(self, participants: list[dict], outcome_summary: str) -> str:
         prompt = (

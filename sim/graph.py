@@ -10,30 +10,22 @@ def _safe(s: str) -> str:
 
 def _node_label(node: Node) -> str:
     rep = node.state.get("reputation", 0.5)
-    assets_list = node.state.get("assets", [])
-    if not isinstance(assets_list, list):
-        assets_list = []
-    debts_list = node.state.get("debts", [])
-    if not isinstance(debts_list, list):
-        debts_list = []
-    claims_list = node.state.get("claims", [])
-    if not isinstance(claims_list, list):
-        claims_list = []
-    assets = len(assets_list)
-    debts = len(debts_list)
-    claims = len(claims_list)
-    return f"{node.name}\\n{node.kind}\\nrep={rep:.2f}, A={assets}, D={debts}, C={claims}"
+    job = node.state.get("job") if isinstance(node.state, dict) else None
+    job_line = job if isinstance(job, str) and job.strip() else ""
+    base = f"{node.name}"
+    if job_line:
+        base += f"\\n{job_line}"
+    base += f"\\nrep={rep:.2f}"
+    return base
 
 
 def _edge_label(edge: Edge) -> str:
     c = edge.characteristics
     s = c.get("strength", 0)
-    a = c.get("activation_rate", 0)
-    e = c.get("enforceability", 0)
     desc = edge.specifics.get("relationship_description", "")
     if desc == "New interaction edge":
         desc = "Relationship"
-    return f"s={s:.2f}, a={a:.2f}, e={e:.2f}\\n{desc}"
+    return f"{desc} (s={s:.2f})"
 
 
 def _edge_color(strength: float) -> str:
@@ -53,9 +45,17 @@ def state_to_dot(state: SimulationState) -> str:
     ]
 
     for node in state.nodes.values():
-        fill = "#e8f4ff" if node.kind == "agent" else "#fff4e5"
+        if node.kind == "agent":
+            fill = "#c8f7c5"
+            shape = "circle"
+            size_attrs = ', width="1.2", height="1.2", fixedsize=true, fontsize="9"'
+        else:
+            inst_type = node.traits.get("institution_type") if isinstance(node.traits, dict) else ""
+            fill = "#fff5c2" if str(inst_type).lower() == "family" else "#dce9ff"
+            shape = "box"
+            size_attrs = ', width="1.8", height="1.1", fixedsize=true'
         lines.append(
-            f'  "{_safe(node.id)}" [label="{_node_label(node)}", fillcolor="{fill}"];'
+            f'  "{_safe(node.id)}" [label="{_node_label(node)}", fillcolor="{fill}", shape="{shape}"{size_attrs}];'
         )
 
     seen_pairs = set()
