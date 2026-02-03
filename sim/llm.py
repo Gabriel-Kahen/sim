@@ -95,16 +95,18 @@ class LLMClient:
         text = self._generate(prompt)
         return text or f"Tick {t}: " + " | ".join(events)
 
-    def propose_institution(self, participants: list[dict], outcome_summary: str) -> Dict[str, str]:
+    def propose_institution(self, participants: list[dict], outcome_summary: str, recent: list[str] | None = None) -> Dict[str, str]:
         """
         Ask the LLM for an open-ended institution spec (type/name/description).
         """
+        recent_note = f" Avoid repeating these recent institution themes: {recent}." if recent else ""
         prompt = (
             "Two or more agents want to form a new institution that is NOT a family/kin/support network. "
             "Base it on their jobs/networks/interests (e.g., finance, trade, guild, research, security, education, healthcare, logistics, culture). "
             "Propose a JSON object with keys: \"name\",\"institution_type\",\"description\",\"policies\",\"governance\". "
-            "Keep it short and grounded in the outcome. Avoid words: family, kin, mutual aid, support network.\n"
-            f"Participants: {participants}\nOutcome: {outcome_summary}\n"
+            "Keep it short and grounded in the outcome. Avoid words: family, kin, mutual aid, support network, artisan collective, guild collective, co-op unless clearly implied. "
+            f"{recent_note}\n"
+            f"Participants (include jobs if known): {participants}\nOutcome: {outcome_summary}\n"
             "Respond with JSON only."
         )
         try:
@@ -115,13 +117,106 @@ class LLMClient:
         except Exception:
             pass
         # Fallback
-        return {
-            "name": "Cooperative",
-            "institution_type": "Cooperative",
-            "description": "A small cooperative formed to coordinate resources.",
-            "policies": "Mutual support and fair exchange",
-            "governance": "Consensus among members",
-        }
+        fallback_opts = [
+            {
+                "name": "Trade Exchange",
+                "institution_type": "Trade consortium",
+                "description": "A group coordinating commercial routes and pricing.",
+                "policies": "Fair pricing and shared logistics",
+                "governance": "Rotating council",
+            },
+            {
+                "name": "Mutual Credit House",
+                "institution_type": "Finance",
+                "description": "A small lender/clearinghouse for members.",
+                "policies": "Transparent ledgers and capped interest",
+                "governance": "Elected treasurer board",
+            },
+            {
+                "name": "Security Pact",
+                "institution_type": "Security",
+                "description": "Members coordinate protection and dispute response.",
+                "policies": "Collective defense and mediation first",
+                "governance": "Consensus among signatories",
+            },
+            {
+                "name": "Workshop League",
+                "institution_type": "Craft guild",
+                "description": "Shared standards and training for makers.",
+                "policies": "Quality standards and apprenticeships",
+                "governance": "Elected master artisans",
+            },
+            {
+                "name": "Scholars Circle",
+                "institution_type": "Research/Education",
+                "description": "Members share knowledge and fund study.",
+                "policies": "Open exchange of findings",
+                "governance": "Steward council",
+            },
+        ]
+        return random.choice(fallback_opts)
+
+    def propose_job(self, node: Dict[str, Any]) -> str:
+        """
+        Ask the LLM for a concise job/title given node traits/memories; fallback to a small generic set.
+        """
+        prompt = (
+            "Suggest a concise job or role for this agent based on their traits and recent memories. "
+            "Return a short title only (no prose). Examples: Merchant, Mediator, Bookkeeper, Harbor Inspector, Loan Officer.\n"
+            f"Agent: {node}\n"
+            "Respond with a short title only."
+        )
+        try:
+            raw = self._generate(prompt)
+            if raw:
+                return raw.strip().splitlines()[0][:80]
+        except Exception:
+            pass
+        return random.choice(["Merchant", "Mediator", "Bookkeeper", "Inspector", "Courier", "Broker"])
+
+    def propose_shock_story(self, node: Dict[str, Any], env: Dict[str, Any]) -> str:
+        prompt = (
+            "Invent a brief shock description affecting this node. Keep it to one short clause.\n"
+            f"Node: {node}\nEnvironment: {env}\n"
+            "Avoid generic phrasing; be specific (e.g., 'Local crop blight cuts harvest')."
+        )
+        try:
+            raw = self._generate(prompt)
+            if raw:
+                return raw.strip().splitlines()[0][:120]
+        except Exception:
+            pass
+        return "A sudden disruption hits the local economy."
+
+    def propose_inflow_story(self, env: Dict[str, Any]) -> str:
+        prompt = (
+            "Invent a brief inflow description for an exogenous resource injection. One short clause only.\n"
+            f"Environment: {env}\n"
+            "Example styles: 'Civic grant program releases funds', 'Trade surplus redistributed', 'Patron donates capital'."
+        )
+        try:
+            raw = self._generate(prompt)
+            if raw:
+                return raw.strip().splitlines()[0][:120]
+        except Exception:
+            pass
+        return "A grant program releases funds."
+
+    def propose_edge_description(self, participants: list[dict], outcome_summary: str) -> str:
+        prompt = (
+            "Given two nodes and their recent interaction, provide a concise relationship label (e.g., 'child', 'business partner', "
+            "'trusted ally', 'rival', 'loan provider', 'guild member with'). Avoid generic words like 'relationship' or 'tie'. "
+            "Return one short phrase only.\n"
+            f"Participants: {participants}\nOutcome: {outcome_summary}\n"
+            "Respond with a short label only."
+        )
+        try:
+            raw = self._generate(prompt)
+            if raw:
+                return raw.strip().splitlines()[0][:80]
+        except Exception:
+            pass
+        return "associate"
 
     @staticmethod
     def _coerce_json(raw: str) -> Dict[str, Any]:

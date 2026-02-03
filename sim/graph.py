@@ -31,6 +31,8 @@ def _edge_label(edge: Edge) -> str:
     a = c.get("activation_rate", 0)
     e = c.get("enforceability", 0)
     desc = edge.specifics.get("relationship_description", "")
+    if desc == "New interaction edge":
+        desc = "Relationship"
     return f"s={s:.2f}, a={a:.2f}, e={e:.2f}\\n{desc}"
 
 

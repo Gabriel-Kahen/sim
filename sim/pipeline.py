@@ -39,7 +39,7 @@ class Simulator:
                 "t": current.t,
             }
             patch = self.llm.compiler(writer_out["outcome_summary"], context)
-            patch = self._normalize_edge_ops(patch, (u, v), current)
+            patch = self._normalize_edge_ops(patch, (u, v), current, writer_out["outcome_summary"])
             patches.append(patch)
             event_log.append(f"Pair {u} & {v}: {writer_out['outcome_summary']}")
             # Institution formation chance
@@ -62,6 +62,7 @@ class Simulator:
             current.apply_patch(patch, self.engine_cfg)
 
         self._apply_environment_processes(current, event_log)
+        self._prune_edges(current, event_log)
         self._memory_maintenance(current)
         self._write_tick_event(current, event_log)
 
@@ -192,9 +193,6 @@ class Simulator:
             if not isinstance(assets, list):
                 assets = []
                 node.state["assets"] = assets
-            if not isinstance(assets, list):
-                assets = []
-                node.state["assets"] = assets
             last_asset = next((a for a in reversed(assets) if isinstance(a, dict)), None)
             if last_asset and last_asset.get("status") == "active":
                 value = last_asset.get("value", 0) or 0
@@ -209,6 +207,11 @@ class Simulator:
         for node in nodes_list:
             if random.random() < shock_freq:
                 magnitude = random.gauss(shocks.get("magnitude_mean", 0), shocks.get("magnitude_std", 1))
+                shock_story = shocks.get("story")
+                if isinstance(shock_story, list):
+                    shock_story = None
+                if not isinstance(shock_story, str) or not shock_story:
+                    shock_story = self.llm.propose_shock_story(node.to_dict(), env)
                 assets_list = node.state.get("assets")
                 if not isinstance(assets_list, list):
                     assets_list = []
@@ -220,7 +223,7 @@ class Simulator:
                         "last_updated": now_ts(),
                         "value": magnitude,
                         "status": "active",
-                        "description": shocks.get("story", "Shock event"),
+                        "description": shock_story or "Shock event",
                     }
                 )
                 mems_list = node.state.get("memories")
@@ -228,9 +231,9 @@ class Simulator:
                     mems_list = []
                     node.state["memories"] = mems_list
                 mems_list.append(
-                    {"id": new_id("mem"), "created_at": now_ts(), "description": shocks.get("story", "Shock event")}
+                    {"id": new_id("mem"), "created_at": now_ts(), "description": shock_story or "Shock event"}
                 )
-                event_log.append(f"Shock to {node.id}: {shocks.get('story', '')} (delta {round(magnitude,2)})")
+                event_log.append(f"Shock to {node.id}: {shock_story or ''} (delta {round(magnitude,2)})")
 
         # Inflow
         inflow = env.get("inflow", {})
@@ -238,6 +241,11 @@ class Simulator:
             targets = nodes_list.copy()
             random.shuffle(targets)
             amount = inflow.get("amount", 0)
+            inflow_story = inflow.get("story")
+            if isinstance(inflow_story, list):
+                inflow_story = None
+            if not isinstance(inflow_story, str) or not inflow_story:
+                inflow_story = self.llm.propose_inflow_story(env)
             for node in targets[: max(1, len(targets) // 2)]:
                 assets_list = node.state.get("assets")
                 if not isinstance(assets_list, list):
@@ -250,7 +258,7 @@ class Simulator:
                         "last_updated": now_ts(),
                         "value": amount,
                         "status": "active",
-                        "description": inflow.get("story", "Inflow"),
+                        "description": inflow_story or "Inflow",
                     }
                 )
                 mems_list = node.state.get("memories")
@@ -258,9 +266,9 @@ class Simulator:
                     mems_list = []
                     node.state["memories"] = mems_list
                 mems_list.append(
-                    {"id": new_id("mem"), "created_at": now_ts(), "description": inflow.get("story", "Inflow received")}
+                    {"id": new_id("mem"), "created_at": now_ts(), "description": inflow_story or "Inflow received"}
                 )
-                event_log.append(f"Inflow to {node.id}: +{amount} ({inflow.get('story', '')})")
+                event_log.append(f"Inflow to {node.id}: +{amount} ({inflow_story or ''})")
 
         # Aging and simple succession stub
         for node in nodes_list:
@@ -294,8 +302,11 @@ class Simulator:
                     self._handle_death(state, node, event_log)
                     event_log.append(f"{node.id} died at age {age}")
                 # Drift job and succession intent
-                if job_options and random.random() < job_change_rate:
-                    new_job = random.choice(job_options)
+                if random.random() < job_change_rate:
+                    if job_options:
+                        new_job = random.choice(job_options)
+                    else:
+                        new_job = self.llm.propose_job(node.to_dict())
                     node.state["job"] = new_job
                     node.state.setdefault("memories", []).append(
                         {"id": new_id("mem"), "created_at": now_ts(), "description": f"Shifted job to {new_job}"}
@@ -316,13 +327,16 @@ class Simulator:
             if len(mems) > cap:
                 node.state["memories"] = mems[-cap:]
 
-    def _normalize_edge_ops(self, patch: Patch, endpoints: tuple[str, str], state: SimulationState) -> Patch:
+    def _normalize_edge_ops(self, patch: Patch, endpoints: tuple[str, str], state: SimulationState, outcome_summary: str) -> Patch:
         """
         If compiler tries to update a non-existent edge between endpoints, convert to create_edge with defaults.
         """
         u, v = endpoints
         new_ops: List[Dict[str, Any]] = []
         for op in patch.ops:
+            edge_data = op.get("edge", {})
+            if not isinstance(edge_data, dict):
+                edge_data = {}
             if op.get("op") == "create_node":
                 # Skip LLM-created nodes; we only mutate existing nodes.
                 continue
@@ -330,12 +344,20 @@ class Simulator:
                 edge_id = op.get("id")
                 if edge_id and edge_id not in state.edges:
                     ts = now_ts()
-                    edge_data = op.get("edge", {})
                     src_val = edge_data.get("source", u)
                     tgt_val = edge_data.get("target", v)
                     if not isinstance(src_val, str) or not isinstance(tgt_val, str):
                         src_val, tgt_val = u, v
                     canonical_id = edge_id or f"edge-{min(src_val, tgt_val)}-{max(src_val, tgt_val)}"
+                    desc = None
+                    if isinstance(edge_data.get("specifics"), dict):
+                        desc = edge_data["specifics"].get("relationship_description")
+                    if not desc:
+                        name_u = state.nodes.get(u).name if state.nodes.get(u) else u
+                        name_v = state.nodes.get(v).name if state.nodes.get(v) else v
+                        desc = self.llm.propose_edge_description(
+                            [{"id": u, "name": name_u}, {"id": v, "name": name_v}], outcome_summary
+                        )
                     default_edge = {
                         "id": canonical_id,
                         "source": min(src_val, tgt_val),
@@ -355,7 +377,7 @@ class Simulator:
                         "specifics": edge_data.get(
                             "specifics",
                             {
-                                "relationship_description": "New interaction edge",
+                                "relationship_description": desc,
                                 "expectations": "Light coordination",
                                 "history": "Formed during interaction",
                             },
@@ -365,6 +387,8 @@ class Simulator:
                     continue
             if op.get("op") == "create_edge":
                 edge_data = op.get("edge", {})
+                if not isinstance(edge_data, dict):
+                    edge_data = {}
                 if "source" not in edge_data:
                     edge_data["source"] = endpoints[0]
                 if "target" not in edge_data:
@@ -383,7 +407,17 @@ class Simulator:
                 if "metadata" not in edge_data:
                     ts = now_ts()
                     edge_data["metadata"] = {"id": edge_data["id"], "created_at": ts, "last_updated": ts}
-                op["edge"] = edge_data
+                specs = edge_data.get("specifics") or {}
+                if not isinstance(specs, dict):
+                    specs = {}
+                if not specs.get("relationship_description"):
+                    name_u = state.nodes.get(src).name if state.nodes.get(src) else src
+                    name_v = state.nodes.get(tgt).name if state.nodes.get(tgt) else tgt
+                    specs["relationship_description"] = self.llm.propose_edge_description(
+                        [{"id": src, "name": name_u}, {"id": tgt, "name": name_v}], outcome_summary
+                    )
+                edge_data["specifics"] = specs
+            op["edge"] = edge_data
             new_ops.append(op)
         return Patch(ops=new_ops, notes=patch.notes)
 
@@ -406,10 +440,11 @@ class Simulator:
         if shared:
             return
         participants = [
-            {"id": u, "name": nodes[u].name},
-            {"id": v, "name": nodes[v].name},
+            {"id": u, "name": nodes[u].name, "job": nodes[u].state.get("job")},
+            {"id": v, "name": nodes[v].name, "job": nodes[v].state.get("job")},
         ]
-        spec = self.llm.propose_institution(participants, outcome_summary)
+        recent = [n.traits.get("institution_type") for n in state.nodes.values() if n.kind == "institution"]
+        spec = self.llm.propose_institution(participants, outcome_summary, recent=recent[-5:] if recent else None)
         ts = now_ts()
         inst_id = new_id("inst")
         inst_traits = {
@@ -434,8 +469,8 @@ class Simulator:
         inst_node = Node(id=inst_id, kind="institution", name=spec.get("name", f"Institution {inst_id[-4:]}"), traits=inst_traits, state=inst_state)
         state.nodes[inst_id] = inst_node
         # Membership edges
-        self._ensure_edge(state, u, inst_id, "Institution membership", strength=0.3, activation=0.3, enforceability=0.2, visibility=0.6)
-        self._ensure_edge(state, v, inst_id, "Institution membership", strength=0.3, activation=0.3, enforceability=0.2, visibility=0.6)
+        self._ensure_edge(state, u, inst_id, "Institution membership", strength=0.6, activation=0.4, enforceability=0.4, visibility=0.7)
+        self._ensure_edge(state, v, inst_id, "Institution membership", strength=0.6, activation=0.4, enforceability=0.4, visibility=0.7)
         # Memories
         for nid in (u, v):
             nodes[nid].state.setdefault("memories", []).append(
@@ -497,9 +532,9 @@ class Simulator:
         targets = [parent] + siblings
         family_inst = self._family_institution(state, family_id) if family_id else None
         for other in targets:
-            self._ensure_edge(state, child_id, other.id, "Family tie")
+            self._ensure_edge(state, child_id, other.id, "Family tie", strength=0.4, activation=0.4, enforceability=0.5, visibility=0.7)
         if family_inst:
-            self._ensure_edge(state, child_id, family_inst, "Family institution membership", strength=0.65, enforceability=0.5, visibility=0.7)
+            self._ensure_edge(state, child_id, family_inst, "Family institution membership", strength=0.85, activation=0.5, enforceability=0.6, visibility=0.85)
         return child_id
 
     def _ensure_edge(
@@ -599,8 +634,44 @@ class Simulator:
         inst_node = Node(id=inst_id, kind="institution", name=f"Family {new_family}", traits=inst_traits, state=inst_state)
         state.nodes[inst_id] = inst_node
         # Connect membership edge
-        self._ensure_edge(state, node.id, inst_id, "Family institution membership", strength=0.65, enforceability=0.5, visibility=0.7)
+        self._ensure_edge(state, node.id, inst_id, "Family institution membership", strength=0.85, activation=0.5, enforceability=0.6, visibility=0.85)
         return new_family
+
+    def _prune_edges(self, state: SimulationState, event_log: list[str]) -> None:
+        max_agent = self.engine_cfg.get("max_edges_agent", float("inf"))
+        max_inst = self.engine_cfg.get("max_edges_institution", float("inf"))
+        while True:
+            deg: Dict[str, List[str]] = {nid: [] for nid in state.nodes.keys()}
+            for e_id, e in list(state.edges.items()):
+                if e.source in deg:
+                    deg[e.source].append(e_id)
+                if e.target in deg:
+                    deg[e.target].append(e_id)
+            offenders = []
+            for nid, edges_ids in deg.items():
+                node = state.nodes.get(nid)
+                if not node:
+                    continue
+                limit = max_agent if node.kind == "agent" else max_inst
+                if len(edges_ids) > limit:
+                    offenders.append((nid, edges_ids, limit))
+            if not offenders:
+                break
+            nid, edges_ids, limit = offenders[0]
+            weakest_id = None
+            weakest_strength = float("inf")
+            for e_id in edges_ids:
+                edge = state.edges.get(e_id)
+                if not edge:
+                    continue
+                strength = edge.characteristics.get("strength", 0)
+                if strength < weakest_strength:
+                    weakest_strength = strength
+                    weakest_id = e_id
+            if weakest_id:
+                removed = state.edges.pop(weakest_id, None)
+                if removed:
+                    event_log.append(f"Pruned edge {weakest_id} between {removed.source}-{removed.target}")
 
     def _write_tick_event(self, state: SimulationState, event_log: List[str]) -> None:
         summary = self.llm.summarize_tick(event_log, state.t)

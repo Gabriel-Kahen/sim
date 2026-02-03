@@ -223,7 +223,7 @@ class SimulationState:
                     if edge_id in self.edges:
                         self.edges.pop(edge_id)
                 case _:
-                    raise ValueError(f"unsupported op {op}")
+                    continue
         self.events.append({"t": self.t, "notes": patch.notes})
 
     def _apply_node_changes(self, node: Node, changes: List[UpdateChange]) -> None:

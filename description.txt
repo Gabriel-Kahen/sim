@@ -475,5 +475,5 @@ This pipeline gives you:
 Implementation notes (current)
 - Edges are canonicalized to one undirected edge per pair; updates merge into the existing edge.
 - LLM compiler errors fall back to appending memories; bad ops are skipped to keep ticks running.
-- Jobs and succession_intent change via LLM patches plus light engine drift; births (children inherit family/institution ties) and deaths (assets moved to family institution) are simulated; rare defection allows agents to form new families/institutions.
+- Jobs and succession_intent change via LLM patches plus light engine drift; jobs are LLM-proposed when no presets exist; births (children inherit family/institution ties) and deaths (assets moved to family institution) are simulated; rare defection allows agents to form new families/institutions.
 - Memories accrue from interactions, shocks, inflows, fallbacks, births/deaths/defections, capped by memory_capacity.
